@@ -14,6 +14,28 @@ uniform sampler2D uImage;
 
 out vec4 fragColor;
 
+const int SAMPLES = 56;
+const float GOLDEN_ANGLE = 2.39996;
+const float MAX_BLUR = 20.0;
+
+vec4 sampleBlurred(sampler2D tex, vec2 uv, vec2 pixToUv, float radius) {
+    if (radius < 0.5) return texture(tex, uv);
+
+    vec4 sum = vec4(0.0);
+    float totalWeight = 0.0;
+    float sigma = radius * 0.4;
+
+    for (int i = 0; i < SAMPLES; i++) {
+        float r = sqrt(float(i) / float(SAMPLES)) * radius;
+        float theta = float(i) * GOLDEN_ANGLE;
+        vec2 offset = vec2(cos(theta), sin(theta)) * r * pixToUv;
+        float w = exp(-0.5 * r * r / (sigma * sigma));
+        sum += texture(tex, clamp(uv + offset, 0.0, 1.0)) * w;
+        totalWeight += w;
+    }
+    return sum / totalWeight;
+}
+
 void main() {
     vec2 pos = FlutterFragCoord().xy;
 
@@ -44,14 +66,19 @@ void main() {
 
     float imgAspect = uImageSize.x / uImageSize.y;
     vec2 uv;
+    vec2 pixToUv;
     if (imgAspect > 1.0) {
         uv = vec2(localPos.x / imgAspect * 0.5 + 0.5, localPos.y * 0.5 + 0.5);
+        pixToUv = vec2(0.5 / (effectiveR * imgAspect), 0.5 / effectiveR);
     } else {
         uv = vec2(localPos.x * 0.5 + 0.5, localPos.y * imgAspect * 0.5 + 0.5);
+        pixToUv = vec2(0.5 / effectiveR, 0.5 * imgAspect / effectiveR);
     }
     uv = clamp(uv, 0.0, 1.0);
 
-    vec4 imgColor = texture(uImage, uv);
+    float blurProximity = 1.0 - smoothstep(0.0, uRadius2 / sqrt(uThreshold), surfDist);
+    float blurRadius = MAX_BLUR * blurProximity;
+    vec4 imgColor = sampleBlurred(uImage, uv, pixToUv, blurRadius);
 
     float t = smoothstep(0.35, 0.65, f2 / (f1 + f2));
     vec4 color = mix(vec4(0.0, 0.0, 0.0, 1.0), imgColor, t);

@@ -48,3 +48,14 @@ A new Flutter project.
 - Изображение в круге масштабируется с actualR2 (effectiveR).
 
 **Следующим шагом:** добавить размытие изображения при сближении (blur 0…max, отдельный триггер по видимому радиусу, сглаживание шума).
+
+---
+
+## Шаг 5: Добавить blur изображения
+
+При сближении подвижного шара с RRect изображение размывается (вдали blur=0, вплотную — до MAX_BLUR). Триггер blur отделён от триггера размера: blur растёт только когда расстояние до RRect меньше видимого радиуса шара (`uRadius2/sqrt(uThreshold)`). Сглаживание: спиральное сэмплирование с Gaussian-весами, 56 сэмплов, MAX_BLUR=20.
+
+- Функция `sampleBlurred(tex, uv, pixToUv, radius)`: золотой угол, sigma = radius*0.4.
+- blurProximity = 1 - smoothstep(0, effectiveRadius, surfDist); blurRadius = MAX_BLUR * blurProximity.
+
+**Следующим шагом:** подогнать конструкцию под Dynamic Island (размеры/позиция RRect, обрезка сверху, Flutter-оверлей).
