@@ -39,6 +39,12 @@ vec4 sampleBlurred(sampler2D tex, vec2 uv, vec2 pixToUv, float radius) {
 void main() {
     vec2 pos = FlutterFragCoord().xy;
 
+    float topEdge = uCenter1.y - uHalfSize1.y - 2.0;
+    if (pos.y < topEdge) {
+        fragColor = vec4(0.0);
+        return;
+    }
+
     // Distance from ball 2 center to the RRect surface
     vec2 qDist = abs(uCenter2 - uCenter1) - (uHalfSize1 - uCornerR1);
     float surfDist = length(max(qDist, 0.0)) + min(max(qDist.x, qDist.y), 0.0) - uCornerR1;

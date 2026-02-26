@@ -59,3 +59,15 @@ A new Flutter project.
 - blurProximity = 1 - smoothstep(0, effectiveRadius, surfDist); blurRadius = MAX_BLUR * blurProximity.
 
 **Следующим шагом:** подогнать конструкцию под Dynamic Island (размеры/позиция RRect, обрезка сверху, Flutter-оверлей).
+
+---
+
+## Шаг 6: Подогнать под Dynamic Island
+
+Фиксированный RRect приведён к размерам и позиции Dynamic Island: 126×37 pt, центр по горизонтали — середина экрана, по вертикали — 29.5 pt (верх ~11 pt). Всё выше верхнего края острова отсекается в шейдере (граница поднята на 2 px, чтобы не резать капсулу). Поверх шейдера нарисован чёрный Flutter-оверлей той же формы и размера — без искажений от метаболов.
+
+- Центр RRect: (screenWidth/2, 29.5); halfSize (63, 18.5), cornerR 18.5.
+- В шейдере: if (pos.y < uCenter1.y - uHalfSize1.y - 2.0) → прозрачный пиксель.
+- Оверлей: Positioned + Container с BorderRadius.circular(halfH).
+
+**Следующим шагом:** snapping к верхней/нижней границе при отпускании и уменьшенный оверлей с выравниванием нижней границы по низу Dynamic Island.

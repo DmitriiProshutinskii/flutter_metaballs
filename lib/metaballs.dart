@@ -55,6 +55,12 @@ class _MetaBallsViewState extends State<MetaBallsView> {
       return const SizedBox.shrink();
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final centerX = screenWidth / 2;
+    const halfW = 63.0;
+    const halfH = 18.5;
+    const centerY = 29.5;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
@@ -64,13 +70,30 @@ class _MetaBallsViewState extends State<MetaBallsView> {
                   .clamp(0.0, constraints.maxHeight);
             });
           },
-          child: CustomPaint(
-            size: Size.infinite,
-            painter: MetaBallsPainter(
-              program: program,
-              image: image,
-              movingY: movingY,
-            ),
+          child: Stack(
+            children: [
+              CustomPaint(
+                size: Size.infinite,
+                painter: MetaBallsPainter(
+                  program: program,
+                  image: image,
+                  movingY: movingY,
+                  centerX: centerX,
+                ),
+              ),
+              Positioned(
+                left: centerX - halfW,
+                top: centerY - halfH,
+                child: Container(
+                  width: halfW * 2,
+                  height: halfH * 2,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(halfH),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -82,31 +105,32 @@ class MetaBallsPainter extends CustomPainter {
   final ui.FragmentProgram program;
   final ui.Image image;
   final double movingY;
+  final double centerX;
 
   MetaBallsPainter({
     required this.program,
     required this.image,
     required this.movingY,
+    required this.centerX,
   });
 
-  static const _center1X = 200.0;
-  static const _center1Y = 300.0;
-  static const _halfW1 = 120.0;
-  static const _halfH1 = 30.0;
-  static const _cornerR1 = 30.0;
+  static const _center1Y = 29.5;
+  static const _halfW1 = 63.0;
+  static const _halfH1 = 18.5;
+  static const _cornerR1 = 18.5;
   static const _r2 = 80.0;
-  static const _threshold = 1.2;
+  static const _threshold = 1.0;
 
   @override
   void paint(Canvas canvas, Size size) {
     final shader = program.fragmentShader();
 
-    shader.setFloat(0, _center1X); // uCenter1
+    shader.setFloat(0, centerX); // uCenter1
     shader.setFloat(1, _center1Y);
     shader.setFloat(2, _halfW1); // uHalfSize1
     shader.setFloat(3, _halfH1);
     shader.setFloat(4, _cornerR1); // uCornerR1
-    shader.setFloat(5, _center1X); // uCenter2
+    shader.setFloat(5, centerX); // uCenter2
     shader.setFloat(6, movingY);
     shader.setFloat(7, _r2); // uRadius2
     shader.setFloat(8, _threshold); // uThreshold
@@ -125,6 +149,6 @@ class MetaBallsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant MetaBallsPainter oldDelegate) {
-    return oldDelegate.movingY != movingY;
+    return oldDelegate.movingY != movingY || oldDelegate.centerX != centerX;
   }
 }
