@@ -53,7 +53,7 @@ void main() {
     float proximity = smoothstep(0.0, uRadius2 * 2.5, surfDist);
     float actualR2 = mix(uHalfSize1.y, uRadius2, proximity);
 
-    // RRect field (SDF to skeleton)
+    // RRect field
     vec2 q = abs(pos - uCenter1) - (uHalfSize1 - uCornerR1);
     float d1 = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
     float f1 = (uCornerR1 * uCornerR1) / (d1 * d1 + 0.0001);
@@ -67,6 +67,7 @@ void main() {
     float edge = 0.01;
     float alpha = smoothstep(uThreshold - edge, uThreshold + edge, field);
 
+    // Image mapping scales with the dynamic radius
     float effectiveR = actualR2 / sqrt(uThreshold);
     vec2 localPos = (pos - uCenter2) / effectiveR;
 
