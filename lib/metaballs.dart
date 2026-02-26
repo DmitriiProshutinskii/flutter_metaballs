@@ -32,16 +32,21 @@ class _MetaBallsViewState extends State<MetaBallsView> {
       return const SizedBox.shrink();
     }
 
-    return GestureDetector(
-      onPanUpdate: (details) {
-        setState(() {
-          movingY += details.delta.dy;
-        });
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GestureDetector(
+          onPanUpdate: (details) {
+            setState(() {
+              movingY = (movingY + details.delta.dy)
+                  .clamp(0.0, constraints.maxHeight);
+            });
+          },
+          child: CustomPaint(
+            size: Size.infinite,
+            painter: MetaBallsPainter(program: program, movingY: movingY),
+          ),
+        );
       },
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: MetaBallsPainter(program: program, movingY: movingY),
-      ),
     );
   }
 }
