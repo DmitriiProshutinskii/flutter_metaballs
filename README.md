@@ -77,3 +77,68 @@ A new Flutter project.
 ## Шаг 7: Snapping и оверлей
 
 При отпускании пальца подвижный шар анимированно «прилипает» к одной из двух позиций: верхней (_snapTop = 52) или нижней (_snapBottom = 120). Выбор по середине диапазона. Анимация 300 ms, easeOutCubic. Во время перетаскивания movingY ограничен [_snapTop, _snapBottom]. Оверлей уменьшен до 110×29 pt, нижняя граница совпадает с низом Dynamic Island (centerY + halfH = 48).
+
+Дальше мы выровняли рабочие файлы с эталонным результатом (demo/статья): статус-бар, поведение snap, фон, подпись и порядок слоёв. Каждый из следующих шагов коммитился отдельно.
+
+---
+
+## Шаг 8: Точка входа и стиль статус-бара
+
+Чтобы статус-бар контрастировал с синим фоном и текстом, приложение переключает его стиль (светлый/тёмный) в зависимости от положения шара. В MainApp добавлено состояние _useLightStatusBar и обёртка `AnnotatedRegion<SystemUiOverlayStyle>`; MetaBallsView получает опциональный колбэк onStatusBarStyleChange и пробрасывает его из main.dart.
+
+- В main.dart: bool _useLightStatusBar, setState по колбэку, значение SystemUiOverlayStyle.light / dark.
+- В MetaBallsView: final void Function(bool useLightBar)? onStatusBarStyleChange; вызов колбэка реализован в следующем шаге.
+
+**Следующим шагом:** реализовать логику определения «светлый/тёмный» по movingY и вызывать колбэк при изменении, а также изменить параметры snap под result.
+
+---
+
+## Шаг 9: Параметры snap и уведомление статус-бара
+
+Шар может уезжать до самого верха экрана: _snapTop = 0. Порог «верх/низ» при отпускании смещён — mid = (_snapTop + _snapBottom) / 3, чтобы раньше переключаться в верхнюю позицию. Добавлена логика статус-бара: по movingY считается t и useLightBar = t > 0.5; при смене значения вызывается onStatusBarStyleChange. Первый вызов — в addPostFrameCallback после initState.
+
+- _snapTop заменён на 0.0; формула mid — на деление на 3.
+- _lastReportedLightBar, _notifyStatusBarStyle(); вызовы в listener анимации и в onPanUpdate.
+
+**Следующим шагом:** добавить синий градиентный фон и декоративный круг под подвижным шаром.
+
+---
+
+## Шаг 10: Фон и декоративный круг
+
+Под подвижным шаром добавлен синий фон и полупрозрачный «блик»-круг для визуала в стиле demo/статьи. Фон — Container с высотой movingY + 100 и Color.lerp от прозрачного к насыщенному синему по той же t, что и для статус-бара. Круг 70×70 с BoxShadow (blueAccent, blur 30, spread 15), Opacity по movingY / _snapBottom, центрирован по centerX и movingY.
+
+- Container с color: Color.lerp(0x002962FF, 0xFF2962FF, t) перед CustomPaint.
+- Positioned круг с тенью и Opacity — сразу после фона в Stack.
+
+**Следующим шагом:** оформить оверлей через Builder (diBottom, innerR) и добавить подпись с анимацией по movingY.
+
+---
+
+## Шаг 11: Оверлей и текст
+
+Оверлей приведён к структуре result: константы innerW=110, innerH=29, innerR=innerH/2, diBottom=centerY+halfH в Builder, Positioned(left: centerX - innerW/2, top: diBottom - innerH). Добавлена подпись под шаром: текст с позицией top = movingY + halfH + 30 + (1 - movingY/_snapBottom)*15, цвет и размер шрифта зависят от movingY (чёрный/белый, fontSize 17…26).
+
+- Builder с innerR, diBottom; стили текста: color от movingY < 50, fontSize 17 + (movingY/_snapBottom)*9, fontWeight.w500, letterSpacing -0.3.
+
+**Следующим шагом:** убрать LayoutBuilder и зафиксировать порядок слоёв как в result (фон → круг → жесты+CustomPaint → оверлей → текст).
+
+---
+
+## Шаг 12: Структура виджета и жесты
+
+Дерево виджетов упрощено под result: убран LayoutBuilder, корень build — Stack. Дети Stack идут в порядке: Container фона, декоративный круг, GestureDetector с CustomPaint внутри, Builder(оверлей), Positioned(текст). Жесты остаются на GestureDetector, оборачивающем только слой метаболов.
+
+- Нет LayoutBuilder; порядок слоёв: фон → круг → GestureDetector(CustomPaint) → оверлей → текст.
+
+**Следующим шагом:** при желании унифицировать комментарии в шейдере с эталонным metaballs_.frag.
+
+---
+
+## Шаг 13: Комментарии в шейдере
+
+Логика шейдера не менялась; унифицированы только комментарии с эталонным файлом result. В metaballs.frag комментарий к RRect заменён на «RRect field», перед строкой с effectiveR добавлен комментарий «Image mapping scales with the dynamic radius». Алгоритм, uniform'ы, blur и маска изображения совпадают с result.
+
+- Только правки комментариев; поведение рендера то же.
+
+На этом выравнивание рабочих файлов с result завершено.
