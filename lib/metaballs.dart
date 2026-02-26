@@ -13,7 +13,7 @@ class MetaBallsView extends StatefulWidget {
 
 class _MetaBallsViewState extends State<MetaBallsView>
     with SingleTickerProviderStateMixin {
-  static const _snapTop = 52.0;
+  static const _snapTop = 0.0;
   static const _snapBottom = 120.0;
 
   double movingY = _snapBottom;
@@ -21,6 +21,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
   ui.Image? _image;
   late final AnimationController _animController;
   Animation<double>? _snapAnimation;
+  bool? _lastReportedLightBar;
 
   @override
   void initState() {
@@ -30,9 +31,15 @@ class _MetaBallsViewState extends State<MetaBallsView>
           vsync: this,
           duration: const Duration(milliseconds: 300),
         )..addListener(() {
-          setState(() => movingY = _snapAnimation!.value);
+          setState(() {
+            movingY = _snapAnimation!.value;
+            _notifyStatusBarStyle();
+          });
         });
     _loadResources();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _notifyStatusBarStyle();
+    });
   }
 
   void _snapTo(double target) {
@@ -62,6 +69,15 @@ class _MetaBallsViewState extends State<MetaBallsView>
     return frame.image;
   }
 
+  void _notifyStatusBarStyle() {
+    final t = ((movingY - 30) / (_snapBottom - 30)).clamp(0.0, 1.0);
+    final useLightBar = t > 0.5;
+    if (_lastReportedLightBar != useLightBar) {
+      _lastReportedLightBar = useLightBar;
+      widget.onStatusBarStyleChange?.call(useLightBar);
+    }
+  }
+
   @override
   void dispose() {
     _animController.dispose();
@@ -79,7 +95,6 @@ class _MetaBallsViewState extends State<MetaBallsView>
 
     final screenWidth = MediaQuery.of(context).size.width;
     final centerX = screenWidth / 2;
-    const halfW = 63.0;
     const halfH = 18.5;
     const centerY = 29.5;
     const innerW = 110.0;
@@ -95,10 +110,11 @@ class _MetaBallsViewState extends State<MetaBallsView>
                 _snapTop,
                 _snapBottom,
               );
+              _notifyStatusBarStyle();
             });
           },
           onPanEnd: (_) {
-            final mid = (_snapTop + _snapBottom) / 2;
+            final mid = (_snapTop + _snapBottom) / 3;
             _snapTo(movingY < mid ? _snapTop : _snapBottom);
           },
           child: Stack(
