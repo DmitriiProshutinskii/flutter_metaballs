@@ -71,3 +71,9 @@ A new Flutter project.
 - Оверлей: Positioned + Container с BorderRadius.circular(halfH).
 
 **Следующим шагом:** snapping к верхней/нижней границе при отпускании и уменьшенный оверлей с выравниванием нижней границы по низу Dynamic Island.
+
+---
+
+## Шаг 7: Snapping и оверлей
+
+При отпускании пальца подвижный шар анимированно «прилипает» к одной из двух позиций: верхней (_snapTop = 52) или нижней (_snapBottom = 120). Выбор по середине диапазона. Анимация 300 ms, easeOutCubic. Во время перетаскивания movingY ограничен [_snapTop, _snapBottom]. Оверлей уменьшен до 110×29 pt, нижняя граница совпадает с низом Dynamic Island (centerY + halfH = 48).

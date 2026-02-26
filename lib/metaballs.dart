@@ -10,15 +10,34 @@ class MetaBallsView extends StatefulWidget {
   State<MetaBallsView> createState() => _MetaBallsViewState();
 }
 
-class _MetaBallsViewState extends State<MetaBallsView> {
-  double movingY = 200;
+class _MetaBallsViewState extends State<MetaBallsView>
+    with SingleTickerProviderStateMixin {
+  static const _snapTop = 52.0;
+  static const _snapBottom = 120.0;
+
+  double movingY = _snapBottom;
   ui.FragmentProgram? _program;
   ui.Image? _image;
+  late final AnimationController _animController;
+  Animation<double>? _snapAnimation;
 
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    )..addListener(() {
+        setState(() => movingY = _snapAnimation!.value);
+      });
     _loadResources();
+  }
+
+  void _snapTo(double target) {
+    _snapAnimation = Tween(begin: movingY, end: target).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+    _animController.forward(from: 0);
   }
 
   Future<void> _loadResources() async {
@@ -43,6 +62,7 @@ class _MetaBallsViewState extends State<MetaBallsView> {
 
   @override
   void dispose() {
+    _animController.dispose();
     _image?.dispose();
     super.dispose();
   }
@@ -60,15 +80,22 @@ class _MetaBallsViewState extends State<MetaBallsView> {
     const halfW = 63.0;
     const halfH = 18.5;
     const centerY = 29.5;
+    const innerW = 110.0;
+    const innerH = 29.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
           onPanUpdate: (details) {
+            _animController.stop();
             setState(() {
               movingY = (movingY + details.delta.dy)
-                  .clamp(0.0, constraints.maxHeight);
+                  .clamp(_snapTop, _snapBottom);
             });
+          },
+          onPanEnd: (_) {
+            final mid = (_snapTop + _snapBottom) / 2;
+            _snapTo(movingY < mid ? _snapTop : _snapBottom);
           },
           child: Stack(
             children: [
@@ -82,14 +109,14 @@ class _MetaBallsViewState extends State<MetaBallsView> {
                 ),
               ),
               Positioned(
-                left: centerX - halfW,
-                top: centerY - halfH,
+                left: centerX - innerW / 2,
+                top: centerY + halfH - innerH,
                 child: Container(
-                  width: halfW * 2,
-                  height: halfH * 2,
+                  width: innerW,
+                  height: innerH,
                   decoration: BoxDecoration(
                     color: Colors.black,
-                    borderRadius: BorderRadius.circular(halfH),
+                    borderRadius: BorderRadius.circular(innerH / 2),
                   ),
                 ),
               ),
