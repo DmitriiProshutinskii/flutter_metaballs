@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_metaballs/metaballs.dart';
 
 void main() {
@@ -13,10 +14,27 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
+  bool _useLightStatusBar = true;
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(body: Center(child: MetaBallsView())),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _useLightStatusBar
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: MetaBallsView(
+              onStatusBarStyleChange: (useLightBar) {
+                if (mounted) {
+                  setState(() => _useLightStatusBar = useLightBar);
+                }
+              },
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

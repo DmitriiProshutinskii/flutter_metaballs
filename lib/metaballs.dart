@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class MetaBallsView extends StatefulWidget {
-  const MetaBallsView({super.key});
+  final void Function(bool useLightBar)? onStatusBarStyleChange;
+  const MetaBallsView({super.key, this.onStatusBarStyleChange});
 
   @override
   State<MetaBallsView> createState() => _MetaBallsViewState();
@@ -24,12 +25,13 @@ class _MetaBallsViewState extends State<MetaBallsView>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    )..addListener(() {
-        setState(() => movingY = _snapAnimation!.value);
-      });
+    _animController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 300),
+        )..addListener(() {
+          setState(() => movingY = _snapAnimation!.value);
+        });
     _loadResources();
   }
 
@@ -89,8 +91,10 @@ class _MetaBallsViewState extends State<MetaBallsView>
           onPanUpdate: (details) {
             _animController.stop();
             setState(() {
-              movingY = (movingY + details.delta.dy)
-                  .clamp(_snapTop, _snapBottom);
+              movingY = (movingY + details.delta.dy).clamp(
+                _snapTop,
+                _snapBottom,
+              );
             });
           },
           onPanEnd: (_) {
