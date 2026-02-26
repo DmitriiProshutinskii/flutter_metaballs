@@ -100,9 +100,41 @@ class _MetaBallsViewState extends State<MetaBallsView>
     const innerW = 110.0;
     const innerH = 29.0;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GestureDetector(
+    return Stack(
+      children: [
+        Container(
+          height: movingY + 100,
+          width: double.maxFinite,
+          color: Color.lerp(
+            const ui.Color(0x002962FF),
+            const ui.Color(0xFF2962FF),
+            ((movingY - 30) / (_snapBottom - 30)).clamp(0.0, 1.0),
+          )!,
+        ),
+        Positioned(
+          left: centerX - 35,
+          top: movingY - 35,
+          child: Opacity(
+            opacity: (movingY / _snapBottom).clamp(0.0, 1.0),
+            child: Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blueAccent.shade100.withValues(
+                      alpha: 0.6,
+                    ),
+                    blurRadius: 30,
+                    spreadRadius: 15,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        GestureDetector(
           onPanUpdate: (details) {
             _animController.stop();
             setState(() {
@@ -117,93 +149,57 @@ class _MetaBallsViewState extends State<MetaBallsView>
             final mid = (_snapTop + _snapBottom) / 3;
             _snapTo(movingY < mid ? _snapTop : _snapBottom);
           },
-          child: Stack(
+          child: CustomPaint(
+            size: Size.infinite,
+            painter: MetaBallsPainter(
+              program: program,
+              image: image,
+              movingY: movingY,
+              centerX: centerX,
+            ),
+          ),
+        ),
+        Builder(
+          builder: (context) {
+            const innerR = innerH / 2;
+            const diBottom = centerY + halfH;
+            return Positioned(
+              left: centerX - innerW / 2,
+              top: diBottom - innerH,
+              child: Container(
+                width: innerW,
+                height: innerH,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(innerR),
+                ),
+              ),
+            );
+          },
+        ),
+        Positioned(
+          top: movingY + halfH + 30 + (1 - movingY / _snapBottom) * 15,
+          left: 0,
+          right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                height: movingY + 100,
-                width: double.maxFinite,
-                color: Color.lerp(
-                  const ui.Color(0x002962FF),
-                  const ui.Color(0xFF2962FF),
-                  ((movingY - 30) / (_snapBottom - 30)).clamp(0.0, 1.0),
-                )!,
-              ),
-              Positioned(
-                left: centerX - 35,
-                top: movingY - 35,
-                child: Opacity(
-                  opacity: (movingY / _snapBottom).clamp(0.0, 1.0),
-                  child: Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.blueAccent.shade100.withValues(
-                            alpha: 0.6,
-                          ),
-                          blurRadius: 30,
-                          spreadRadius: 15,
-                        ),
-                      ],
-                    ),
+              Flexible(
+                child: Text(
+                  'Dmitrii Proshutinskii 😎',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: movingY < 50 ? Colors.black : Colors.white,
+                    fontSize: 17 + (movingY / _snapBottom) * 9,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.3,
                   ),
-                ),
-              ),
-              CustomPaint(
-                size: Size.infinite,
-                painter: MetaBallsPainter(
-                  program: program,
-                  image: image,
-                  movingY: movingY,
-                  centerX: centerX,
-                ),
-              ),
-              Builder(
-                builder: (context) {
-                  const innerR = innerH / 2;
-                  const diBottom = centerY + halfH;
-                  return Positioned(
-                    left: centerX - innerW / 2,
-                    top: diBottom - innerH,
-                    child: Container(
-                      width: innerW,
-                      height: innerH,
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(innerR),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              Positioned(
-                top: movingY + halfH + 30 + (1 - movingY / _snapBottom) * 15,
-                left: 0,
-                right: 0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Dmitrii Proshutinskii 😎',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: movingY < 50 ? Colors.black : Colors.white,
-                          fontSize: 17 + (movingY / _snapBottom) * 9,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
