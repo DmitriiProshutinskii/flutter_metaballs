@@ -119,6 +119,38 @@ class _MetaBallsViewState extends State<MetaBallsView>
           },
           child: Stack(
             children: [
+              Container(
+                height: movingY + 100,
+                width: double.maxFinite,
+                color: Color.lerp(
+                  const ui.Color(0x002962FF),
+                  const ui.Color(0xFF2962FF),
+                  ((movingY - 30) / (_snapBottom - 30)).clamp(0.0, 1.0),
+                )!,
+              ),
+              Positioned(
+                left: centerX - 35,
+                top: movingY - 35,
+                child: Opacity(
+                  opacity: (movingY / _snapBottom).clamp(0.0, 1.0),
+                  child: Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blueAccent.shade100.withValues(
+                            alpha: 0.6,
+                          ),
+                          blurRadius: 30,
+                          spreadRadius: 15,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               CustomPaint(
                 size: Size.infinite,
                 painter: MetaBallsPainter(
