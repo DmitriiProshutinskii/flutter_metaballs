@@ -91,7 +91,9 @@ class MetaBallsPainter extends CustomPainter {
 
   static const _center1X = 200.0;
   static const _center1Y = 300.0;
-  static const _r1 = 80.0;
+  static const _halfW1 = 120.0;
+  static const _halfH1 = 30.0;
+  static const _cornerR1 = 30.0;
   static const _r2 = 80.0;
   static const _threshold = 1.2;
 
@@ -101,13 +103,15 @@ class MetaBallsPainter extends CustomPainter {
 
     shader.setFloat(0, _center1X); // uCenter1
     shader.setFloat(1, _center1Y);
-    shader.setFloat(2, _r1); // uRadius1
-    shader.setFloat(3, _center1X); // uCenter2
-    shader.setFloat(4, movingY);
-    shader.setFloat(5, _r2); // uRadius2
-    shader.setFloat(6, _threshold); // uThreshold
-    shader.setFloat(7, image.width.toDouble()); // uImageSize
-    shader.setFloat(8, image.height.toDouble());
+    shader.setFloat(2, _halfW1); // uHalfSize1
+    shader.setFloat(3, _halfH1);
+    shader.setFloat(4, _cornerR1); // uCornerR1
+    shader.setFloat(5, _center1X); // uCenter2
+    shader.setFloat(6, movingY);
+    shader.setFloat(7, _r2); // uRadius2
+    shader.setFloat(8, _threshold); // uThreshold
+    shader.setFloat(9, image.width.toDouble()); // uImageSize
+    shader.setFloat(10, image.height.toDouble());
 
     shader.setImageSampler(0, image);
 
