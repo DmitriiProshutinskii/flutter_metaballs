@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class MetaBallsView extends StatefulWidget {
   const MetaBallsView({super.key});
@@ -12,23 +13,45 @@ class MetaBallsView extends StatefulWidget {
 class _MetaBallsViewState extends State<MetaBallsView> {
   double movingY = 200;
   ui.FragmentProgram? _program;
+  ui.Image? _image;
 
   @override
   void initState() {
     super.initState();
-    _loadShader();
+    _loadResources();
   }
 
-  Future<void> _loadShader() async {
-    final program =
-        await ui.FragmentProgram.fromAsset('shaders/metaballs.frag');
-    if (mounted) setState(() => _program = program);
+  Future<void> _loadResources() async {
+    final results = await Future.wait([
+      ui.FragmentProgram.fromAsset('shaders/metaballs.frag'),
+      _loadImage('assets/avatar.jpg'),
+    ]);
+
+    if (!mounted) return;
+    setState(() {
+      _program = results[0] as ui.FragmentProgram;
+      _image = results[1] as ui.Image;
+    });
+  }
+
+  Future<ui.Image> _loadImage(String asset) async {
+    final data = await rootBundle.load(asset);
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final frame = await codec.getNextFrame();
+    return frame.image;
+  }
+
+  @override
+  void dispose() {
+    _image?.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final program = _program;
-    if (program == null) {
+    final image = _image;
+    if (program == null || image == null) {
       return const SizedBox.shrink();
     }
 
@@ -43,7 +66,11 @@ class _MetaBallsViewState extends State<MetaBallsView> {
           },
           child: CustomPaint(
             size: Size.infinite,
-            painter: MetaBallsPainter(program: program, movingY: movingY),
+            painter: MetaBallsPainter(
+              program: program,
+              image: image,
+              movingY: movingY,
+            ),
           ),
         );
       },
@@ -53,9 +80,14 @@ class _MetaBallsViewState extends State<MetaBallsView> {
 
 class MetaBallsPainter extends CustomPainter {
   final ui.FragmentProgram program;
+  final ui.Image image;
   final double movingY;
 
-  MetaBallsPainter({required this.program, required this.movingY});
+  MetaBallsPainter({
+    required this.program,
+    required this.image,
+    required this.movingY,
+  });
 
   static const _center1X = 200.0;
   static const _center1Y = 300.0;
@@ -74,6 +106,10 @@ class MetaBallsPainter extends CustomPainter {
     shader.setFloat(4, movingY);
     shader.setFloat(5, _r2); // uRadius2
     shader.setFloat(6, _threshold); // uThreshold
+    shader.setFloat(7, image.width.toDouble()); // uImageSize
+    shader.setFloat(8, image.height.toDouble());
+
+    shader.setImageSampler(0, image);
 
     canvas.drawRect(
       Rect.fromLTWH(0, 0, size.width, size.height),
