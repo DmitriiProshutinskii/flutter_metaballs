@@ -160,16 +160,44 @@ class _MetaBallsViewState extends State<MetaBallsView>
                   centerX: centerX,
                 ),
               ),
+              Builder(
+                builder: (context) {
+                  const innerR = innerH / 2;
+                  const diBottom = centerY + halfH;
+                  return Positioned(
+                    left: centerX - innerW / 2,
+                    top: diBottom - innerH,
+                    child: Container(
+                      width: innerW,
+                      height: innerH,
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(innerR),
+                      ),
+                    ),
+                  );
+                },
+              ),
               Positioned(
-                left: centerX - innerW / 2,
-                top: centerY + halfH - innerH,
-                child: Container(
-                  width: innerW,
-                  height: innerH,
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(innerH / 2),
-                  ),
+                top: movingY + halfH + 30 + (1 - movingY / _snapBottom) * 15,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Dmitrii Proshutinskii 😎',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: movingY < 50 ? Colors.black : Colors.white,
+                          fontSize: 17 + (movingY / _snapBottom) * 9,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
