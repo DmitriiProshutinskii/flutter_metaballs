@@ -2,9 +2,13 @@
 
 On iOS with Dynamic Island, Telegram’s profile screen has a distinctive effect: when you scroll up slowly, the avatar *flows* into the Dynamic Island. This project reproduces that behavior in Flutter using a fragment shader and the metaballs algorithm.
 
+![In Telegram](docs/images/telegram.gif)
+
 This README explains what metaballs are, how they are implemented in the shader, how the profile image is drawn inside the moving blob, how everything is wired in Flutter, and how the Telegram-like behavior (snapping, background, blur) is achieved. Code references point to the actual implementation.
 
 **Keywords:** metaballs, shader, GLSL, Flutter, CustomPainter, FragmentShader, Telegram
+
+IMPORTANT: This effect will work correctly only on iOS because only iOS has dynamic island
 
 ---
 
@@ -143,6 +147,10 @@ As the avatar approaches the island, its **radius** in the shader is reduced (in
 
 ---
 
+## Result
+
+![Result](docs/images/result.gif)
+
 ## Running the Project
 
 ```bash
@@ -152,6 +160,4 @@ flutter run
 
 Ensure `assets/avatar.jpg` exists (or change the asset path in [lib/metaballs.dart](lib/metaballs.dart) in `_loadResources`). The shader is loaded from `shaders/metaballs.frag` (see `pubspec.yaml` assets if you move files).
 
----
-
-*This README is based on the original article “Повторяем профиль Телеграмма, используя Metaballs и Flutter,” adapted to English and linked to this repository’s code.*
+IMPORTANT: This effect will work correctly only on iOS because only iOS has dynamic island
