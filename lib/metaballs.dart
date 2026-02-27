@@ -1,8 +1,11 @@
+// Metaballs demo: Telegram-style profile with avatar that "flows" into a Dynamic Island–shaped blob.
+// All UI (background, text, shadow, shader) is driven by a single value: movingY (avatar center Y).
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+/// Full-screen view: draggable metaballs + background + name. Reports status bar style so the app bar can switch icons.
 class MetaBallsView extends StatefulWidget {
   final void Function(bool useLightBar)? onStatusBarStyleChange;
   const MetaBallsView({super.key, this.onStatusBarStyleChange});
@@ -13,9 +16,11 @@ class MetaBallsView extends StatefulWidget {
 
 class _MetaBallsViewState extends State<MetaBallsView>
     with SingleTickerProviderStateMixin {
+  // Snap targets: 0 = fully merged with "Dynamic Island" at top, 120 = profile expanded. Values tuned for this layout.
   static const _snapTop = 0.0;
   static const _snapBottom = 120.0;
 
+  /// Single source of truth for the avatar position. Drives shader (uCenter2.y), background height/color, text position/size, and shadow.
   double movingY = _snapBottom;
   ui.FragmentProgram? _program;
   ui.Image? _image;
@@ -26,6 +31,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
   @override
   void initState() {
     super.initState();
+    // SingleTickerProviderStateMixin gives vsync so the controller advances with the display; required for AnimationController.
     _animController =
         AnimationController(
           vsync: this,
@@ -42,6 +48,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
     });
   }
 
+  /// Animates movingY to [target] with easeOutCubic. Call after drag ends to snap to top or bottom.
   void _snapTo(double target) {
     _snapAnimation = Tween(begin: movingY, end: target).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
@@ -49,6 +56,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
     _animController.forward(from: 0);
   }
 
+  /// Load shader and avatar in parallel so we don't block on sequential I/O. Both are needed before first paint.
   Future<void> _loadResources() async {
     final results = await Future.wait([
       ui.FragmentProgram.fromAsset('shaders/metaballs.frag'),
@@ -62,6 +70,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
     });
   }
 
+  /// Decode asset to [ui.Image] so we can pass it to the fragment shader. Image.asset doesn't give us a sync ui.Image, hence manual codec.
   Future<ui.Image> _loadImage(String asset) async {
     final data = await rootBundle.load(asset);
     final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
@@ -69,6 +78,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
     return frame.image;
   }
 
+  /// Decide status bar style from scroll position. t in [0,1] over the "active" range (30.._snapBottom); useLightBar when t > 0.5. Only notify when the decision changes to avoid unnecessary parent setState.
   void _notifyStatusBarStyle() {
     final t = ((movingY - 30) / (_snapBottom - 30)).clamp(0.0, 1.0);
     final useLightBar = t > 0.5;
@@ -96,12 +106,10 @@ class _MetaBallsViewState extends State<MetaBallsView>
     final screenWidth = MediaQuery.of(context).size.width;
     final centerX = screenWidth / 2;
     const halfH = 18.5;
-    const centerY = 29.5;
-    const innerW = 110.0;
-    const innerH = 29.0;
 
     return Stack(
       children: [
+        // Background height and color both follow movingY; transparent when merged, blue when expanded.
         Container(
           height: movingY + 100,
           width: double.maxFinite,
@@ -111,6 +119,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
             ((movingY - 30) / (_snapBottom - 30)).clamp(0.0, 1.0),
           )!,
         ),
+        // Decorative circle shadow behind the avatar; opacity and color lerp with scroll so it fades as we merge.
         Positioned(
           left: centerX - 35,
           top: movingY - 35,
@@ -137,6 +146,7 @@ class _MetaBallsViewState extends State<MetaBallsView>
             ),
           ),
         ),
+        // Pan: stop any running snap animation and clamp movingY. On release, snap to top or bottom; mid = (0+120)/3 biases toward snapping down (expanded) unless user dragged well up.
         GestureDetector(
           onPanUpdate: (details) {
             _animController.stop();
@@ -189,6 +199,8 @@ class _MetaBallsViewState extends State<MetaBallsView>
   }
 }
 
+/// Paints the metaballs + avatar image by running the fragment shader over the full canvas.
+/// Uniform order must match the GLSL declaration order: vec2 = 2 floats, so uCenter1 = 0,1; uHalfSize1 = 2,3; etc.
 class MetaBallsPainter extends CustomPainter {
   final ui.FragmentProgram program;
   final ui.Image image;
@@ -202,6 +214,7 @@ class MetaBallsPainter extends CustomPainter {
     required this.centerX,
   });
 
+  // RRect (Dynamic Island) geometry; must match layout. Ball 2 nominal radius and threshold (shader uses effectiveR = r/sqrt(threshold)).
   static const _center1Y = 27.5;
   static const _halfW1 = 58.0;
   static const _halfH1 = 18.5;
@@ -213,17 +226,18 @@ class MetaBallsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final shader = program.fragmentShader();
 
-    shader.setFloat(0, centerX); // uCenter1
-    shader.setFloat(1, _center1Y);
-    shader.setFloat(2, _halfW1); // uHalfSize1
-    shader.setFloat(3, _halfH1);
+    // Float uniforms: indices 0..10 map to uCenter1.x, uCenter1.y, uHalfSize1.x, uHalfSize1.y, uCornerR1, uCenter2.x, uCenter2.y, uRadius2, uThreshold, uImageSize.x, uImageSize.y.
+    shader.setFloat(0, centerX); // uCenter1.x
+    shader.setFloat(1, _center1Y); // uCenter1.y
+    shader.setFloat(2, _halfW1); // uHalfSize1.x
+    shader.setFloat(3, _halfH1); // uHalfSize1.y
     shader.setFloat(4, _cornerR1); // uCornerR1
-    shader.setFloat(5, centerX); // uCenter2
-    shader.setFloat(6, movingY);
+    shader.setFloat(5, centerX); // uCenter2.x
+    shader.setFloat(6, movingY); // uCenter2.y
     shader.setFloat(7, _r2); // uRadius2
     shader.setFloat(8, _threshold); // uThreshold
-    shader.setFloat(9, image.width.toDouble()); // uImageSize
-    shader.setFloat(10, image.height.toDouble());
+    shader.setFloat(9, image.width.toDouble()); // uImageSize.x
+    shader.setFloat(10, image.height.toDouble()); // uImageSize.y
 
     shader.setImageSampler(0, image);
 
@@ -232,9 +246,11 @@ class MetaBallsPainter extends CustomPainter {
       Paint()..shader = shader,
     );
 
+    // Always dispose the shader instance; it holds GPU resources and is created every paint.
     shader.dispose();
   }
 
+  /// Repaint only when position or horizontal center changes. Program/image are stable after load.
   @override
   bool shouldRepaint(covariant MetaBallsPainter oldDelegate) {
     return oldDelegate.movingY != movingY || oldDelegate.centerX != centerX;

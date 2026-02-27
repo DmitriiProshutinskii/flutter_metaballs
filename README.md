@@ -1,144 +1,157 @@
-# flutter_metaballs
+# Recreating the Telegram Profile Effect with Metaballs and Flutter
 
-A new Flutter project.
+On iOS with Dynamic Island, Telegram’s profile screen has a distinctive effect: when you scroll up slowly, the avatar *flows* into the Dynamic Island. This project reproduces that behavior in Flutter using a fragment shader and the metaballs algorithm.
 
----
+This README explains what metaballs are, how they are implemented in the shader, how the profile image is drawn inside the moving blob, how everything is wired in Flutter, and how the Telegram-like behavior (snapping, background, blur) is achieved. Code references point to the actual implementation.
 
-## Шаг 1: Базовые гладкие metaballs на шейдере
-
-Сделали самый простой вариант metaballs: два чёрных «шара», которые плавно сливаются. Рендер реализован фрагментным шейдером (GPU): для каждого пикселя считается скалярное поле от двух кругов (`r²/d²`), по порогу строится форма, граница сглаживается через `smoothstep`.
-
-- Два круга задаются центрами и радиусами; порог и ширина сглаживания — в uniform.
-- Шейдер загружается из ассета, uniform передаются по индексам.
-- Один из центров привязан к состоянию `movingY`, чтобы потом добавить движение.
-
-**Следующим шагом:** сделать так, чтобы один из шаров можно было двигать жестом (уже есть `movingY` и `onPanUpdate`), и визуально это отражалось на экране.
+**Keywords:** metaballs, shader, GLSL, Flutter, CustomPainter, FragmentShader, Telegram
 
 ---
 
-## Шаг 2: Один из шаров может двигаться
+## Introduction
 
-Центр второго шара привязан к состоянию `movingY`; жестом перетаскивания его можно двигать по вертикали. Добавлено ограничение по высоте экрана (`LayoutBuilder` + `clamp`), чтобы шар не уходил за границы.
+The “blob merge” effect is often called **metaballs** (or blobby objects, isosurfaces). The idea: at each pixel we compute a scalar *field* as the sum of contributions from several “blobs.” Where the field exceeds a **threshold**, we draw; otherwise we don’t. When two blobs are close, their fields add up and the shapes appear to merge.
 
-- `movingY` обновляется в `onPanUpdate`, передаётся в шейдер как координата Y центра второго круга.
-- Диапазон движения ограничен `[0, maxHeight]`.
+A simple mental model: think of each blob as a charge contributing to an electric field. The field is stronger near the charges and weaker farther away. Where the combined field is above a certain level, we show the surface.
 
-**Следующим шагом:** сделать движущийся шар маской изображения (загрузка картинки, sampler в шейдере, плавный переход между картинкой и чёрным).
+![Electric field analogy](docs/images/image.png)
 
----
+![Field contours](docs/images/image%201.png)
 
-## Шаг 3: Движущийся шар — маска изображения
+For a sphere of radius \(r_i\) centered at \(c_i\), a standard choice is:
 
-Подвижный шар показывает изображение (маска), неподвижный остаётся чёрным. В зоне слияния — плавный переход за счёт отношения полей f1/f2 и smoothstep.
+\[
+f(p) = \sum_{i} \frac{r_i^2}{|p - c_i|^2}
+\]
 
-- Загрузка изображения из ассета (`assets/avatar.jpg`), передача в шейдер через `setImageSampler`.
-- В шейдере: отдельно считаются вклады f1, f2; цвет = mix(чёрный, texture(uImage, uv), t), где t от f2/(f1+f2).
-- UV считаются относительно центра подвижного шара, effectiveR = r/sqrt(threshold), учёт aspect ratio (cover): картинка вписана в круг и двигается с шаром.
-
-**Следующим шагом:** менять радиус и форму: уменьшить фиксированный круг в 2 раза, заменить его на RRect (SDF), добавить динамическое уменьшение радиуса подвижного шара при сближении.
+Here \(p\) is the pixel position, \(c_i\) the center, \(r_i\) the radius. We take the coefficient as 1; the **threshold** then controls where the visible boundary appears. For each pixel we sum these terms; where the sum \(\ge\) threshold we treat the pixel as inside the blob. Bringing two blobs close makes the field between them exceed the threshold, so they visually merge.
 
 ---
 
-## Шаг 4: Менять радиус подвижного шара
+## The Fragment Shader
 
-Фиксированная фигура заменена на широкий RRect (капсула 240×60, cornerR=30). Поле первого «шара» считается через SDF до скелета RRect (`r²/d²`). Радиус подвижного шара теперь зависит от расстояния до RRect: при сближении он уменьшается до вертикального размера капсулы (halfH), при удалении — полный r2.
+A fragment shader is a function that, for a given pixel, returns its color. The GPU runs it for every pixel. In Flutter we use a fragment shader (loaded from `shaders/metaballs.frag`) and draw a full-screen rect with it.
 
-- RRect: halfSize, cornerR; в шейдере — расстояние до скелета, затем поле как uCornerR1²/d².
-- surfDist от центра подвижного шара до поверхности RRect; proximity = smoothstep(0, uRadius2*2.5, surfDist); actualR2 = mix(halfH1, r2, proximity).
-- Изображение в круге масштабируется с actualR2 (effectiveR).
+A minimal two-circle version of the idea looks like this:
 
-**Следующим шагом:** добавить размытие изображения при сближении (blur 0…max, отдельный триггер по видимому радиусу, сглаживание шума).
+```glsl
+#include <flutter/runtime_effect.glsl>
+uniform vec2 uCenter1;
+uniform float uRadius1;
+uniform vec2 uCenter2;
+uniform float uRadius2;
+uniform float uThreshold;
+out vec4 fragColor;
 
----
+void main() {
+    vec2 pos = FlutterFragCoord().xy;
+    vec2 d1 = pos - uCenter1;
+    vec2 d2 = pos - uCenter2;
+    float field = (uRadius1*uRadius1)/(dot(d1,d1) + 0.0001)
+                + (uRadius2*uRadius2)/(dot(d2,d2) + 0.0001);
+    float edge = 0.04;
+    float alpha = smoothstep(uThreshold - edge, uThreshold + edge, field);
+    fragColor = vec4(0.0, 0.0, 0.0, alpha);
+}
+```
 
-## Шаг 5: Добавить blur изображения
+The `+ 0.0001` avoids division by zero. **smoothstep** gives a soft edge: 0 when `field` is below the lower bound, 1 above the upper bound, and a smooth transition in between. Without it, the blob would have a hard, aliased border.
 
-При сближении подвижного шара с RRect изображение размывается (вдали blur=0, вплотную — до MAX_BLUR). Триггер blur отделён от триггера размера: blur растёт только когда расстояние до RRect меньше видимого радиуса шара (`uRadius2/sqrt(uThreshold)`). Сглаживание: спиральное сэмплирование с Gaussian-весами, 56 сэмплов, MAX_BLUR=20.
+The **production shader** in this repo does more:
 
-- Функция `sampleBlurred(tex, uv, pixToUv, radius)`: золотой угол, sigma = radius*0.4.
-- blurProximity = 1 - smoothstep(0, effectiveRadius, surfDist); blurRadius = MAX_BLUR * blurProximity.
+- **Ball 1** is a rounded rectangle (Dynamic Island) using an SDF-style formula instead of a simple circle.
+- **Ball 2** (avatar) has a **dynamic radius** that shrinks as it approaches the island so the merge looks natural.
+- The avatar is filled with a **sampled image** and **blur** that increases near the island.
 
-**Следующим шагом:** подогнать конструкцию под Dynamic Island (размеры/позиция RRect, обрезка сверху, Flutter-оверлей).
-
----
-
-## Шаг 6: Подогнать под Dynamic Island
-
-Фиксированный RRect приведён к размерам и позиции Dynamic Island: 126×37 pt, центр по горизонтали — середина экрана, по вертикали — 29.5 pt (верх ~11 pt). Всё выше верхнего края острова отсекается в шейдере (граница поднята на 2 px, чтобы не резать капсулу). Поверх шейдера нарисован чёрный Flutter-оверлей той же формы и размера — без искажений от метаболов.
-
-- Центр RRect: (screenWidth/2, 29.5); halfSize (63, 18.5), cornerR 18.5.
-- В шейдере: if (pos.y < uCenter1.y - uHalfSize1.y - 2.0) → прозрачный пиксель.
-- Оверлей: Positioned + Container с BorderRadius.circular(halfH).
-
-**Следующим шагом:** snapping к верхней/нижней границе при отпускании и уменьшенный оверлей с выравниванием нижней границы по низу Dynamic Island.
-
----
-
-## Шаг 7: Snapping и оверлей
-
-При отпускании пальца подвижный шар анимированно «прилипает» к одной из двух позиций: верхней (_snapTop = 52) или нижней (_snapBottom = 120). Выбор по середине диапазона. Анимация 300 ms, easeOutCubic. Во время перетаскивания movingY ограничен [_snapTop, _snapBottom]. Оверлей уменьшен до 110×29 pt, нижняя граница совпадает с низом Dynamic Island (centerY + halfH = 48).
-
-Дальше мы выровняли рабочие файлы с эталонным результатом (demo/статья): статус-бар, поведение snap, фон, подпись и порядок слоёв. Каждый из следующих шагов коммитился отдельно.
+See: [shaders/metaballs.frag](shaders/metaballs.frag) for the full implementation, including RRect field, `effectiveR`, UV mapping, and Fibonacci-spiral blur.
 
 ---
 
-## Шаг 8: Точка входа и стиль статус-бара
+## Image Inside the Shader
 
-Чтобы статус-бар контрастировал с синим фоном и текстом, приложение переключает его стиль (светлый/тёмный) в зависимости от положения шара. В MainApp добавлено состояние _useLightStatusBar и обёртка `AnnotatedRegion<SystemUiOverlayStyle>`; MetaBallsView получает опциональный колбэк onStatusBarStyleChange и пробрасывает его из main.dart.
+We draw the profile photo inside the moving blob directly in the shader. Two things matter: (1) mapping the image so it fits the circle without stretching, and (2) using the **effective radius** for that mapping.
 
-- В main.dart: bool _useLightStatusBar, setState по колбэку, значение SystemUiOverlayStyle.light / dark.
-- В MetaBallsView: final void Function(bool useLightBar)? onStatusBarStyleChange; вызов колбэка реализован в следующем шаге.
+### Why Effective Radius Is Not the Raw Radius
 
-**Следующим шагом:** реализовать логику определения «светлый/тёмный» по movingY и вызывать колбэк при изменении, а также изменить параметры snap под result.
+The visible boundary of a blob is where \(f(p) = \text{threshold}\). For a single sphere \(f = R^2/\text{dist}^2\), so at the boundary \(\text{dist}^2 = R^2/\text{threshold}\), i.e. \(\text{dist} = R/\sqrt{\text{threshold}}\). So the **effective radius** (the distance from center to the visible edge) is:
 
----
+\[
+R_{\text{effective}} = \frac{R}{\sqrt{\text{threshold}}}
+\]
 
-## Шаг 9: Параметры snap и уведомление статус-бара
+If \(\text{threshold} = 2\), the edge is at \(R/\sqrt{2}\), not at \(R\). If you map the image using the raw radius \(R\), it will be clipped or extend past the visible circle. So we map by **effective radius**:
 
-Шар может уезжать до самого верха экрана: _snapTop = 0. Порог «верх/низ» при отпускании смещён — mid = (_snapTop + _snapBottom) / 3, чтобы раньше переключаться в верхнюю позицию. Добавлена логика статус-бара: по movingY считается t и useLightBar = t > 0.5; при смене значения вызывается onStatusBarStyleChange. Первый вызов — в addPostFrameCallback после initState.
+\[
+R_{\text{effective}} = \frac{R}{\sqrt{\text{threshold}}}
+\]
 
-- _snapTop заменён на 0.0; формула mid — на деление на 3.
-- _lastReportedLightBar, _notifyStatusBarStyle(); вызовы в listener анимации и в onPanUpdate.
+In our shader we use \(\text{threshold} = 1.0\), so effective radius equals the radius and the math stays simple. See [shaders/metaballs.frag](shaders/metaballs.frag) around `effectiveR` and the UV computation.
 
-**Следующим шагом:** добавить синий градиентный фон и декоративный круг под подвижным шаром.
+![Effective radius vs raw radius](docs/images/image%202.png)
 
----
+Wrong mapping (using raw radius) vs correct (using effective radius):
 
-## Шаг 10: Фон и декоративный круг
+![Wrong UV mapping](docs/images/image%203.png)  
+![Correct UV mapping](docs/images/image%204.png)
 
-Под подвижным шаром добавлен синий фон и полупрозрачный «блик»-круг для визуала в стиле demo/статьи. Фон — Container с высотой movingY + 100 и Color.lerp от прозрачного к насыщенному синему по той же t, что и для статус-бара. Круг 70×70 с BoxShadow (blueAccent, blur 30, spread 15), Opacity по movingY / _snapBottom, центрирован по centerX и movingY.
+### Fitting the Image in the Circle
 
-- Container с color: Color.lerp(0x002962FF, 0xFF2962FF, t) перед CustomPaint.
-- Positioned круг с тенью и Opacity — сразу после фона в Stack.
-
-**Следующим шагом:** оформить оверлей через Builder (diBottom, innerR) и добавить подпись с анимацией по movingY.
-
----
-
-## Шаг 11: Оверлей и текст
-
-Оверлей приведён к структуре result: константы innerW=110, innerH=29, innerR=innerH/2, diBottom=centerY+halfH в Builder, Positioned(left: centerX - innerW/2, top: diBottom - innerH). Добавлена подпись под шаром: текст с позицией top = movingY + halfH + 30 + (1 - movingY/_snapBottom)*15, цвет и размер шрифта зависят от movingY (чёрный/белый, fontSize 17…26).
-
-- Builder с innerR, diBottom; стили текста: color от movingY < 50, fontSize 17 + (movingY/_snapBottom)*9, fontWeight.w500, letterSpacing -0.3.
-
-**Следующим шагом:** убрать LayoutBuilder и зафиксировать порядок слоёв как в result (фон → круг → жесты+CustomPaint → оверлей → текст).
+The circle is symmetric; the image usually is not. We **fit** the image (aspect-ratio preserving): scale so the image fits inside the circle and derive UVs from the position relative to the center, normalized by the effective radius. We **clamp** UVs to \([0,1]\) so we never sample outside the texture. The shader branches on `imgAspect` to handle landscape vs portrait images. Code: [shaders/metaballs.frag](shaders/metaballs.frag) (UV and `pixToUv` block).
 
 ---
 
-## Шаг 12: Структура виджета и жесты
+## Drawing in Flutter
 
-Дерево виджетов упрощено под result: убран LayoutBuilder, корень build — Stack. Дети Stack идут в порядке: Container фона, декоративный круг, GestureDetector с CustomPaint внутри, Builder(оверлей), Positioned(текст). Жесты остаются на GestureDetector, оборачивающем только слой метаболов.
+To draw the shader on screen:
 
-- Нет LayoutBuilder; порядок слоёв: фон → круг → GestureDetector(CustomPaint) → оверлей → текст.
+1. In `initState`, load the shader: `FragmentProgram.fromAsset('shaders/metaballs.frag')`.
+2. Use a **CustomPainter** (e.g. `MetaBallsPainter`) and pass it the `FragmentProgram` and the avatar `ui.Image`.
+3. In `paint`, call `program.fragmentShader()` to get a shader instance.
+4. Set **uniforms in the same order as in the GLSL**: `setFloat(0, ...)`, `setFloat(1, ...)`, … for vec2 (2 floats), float, etc. Set the image with `setImageSampler(0, image)`.
+5. Draw with `canvas.drawRect(rect, Paint()..shader = shader)`.
+6. **Dispose** the shader after use; it holds GPU resources.
 
-**Следующим шагом:** при желании унифицировать комментарии в шейдере с эталонным metaballs_.frag.
+Implementation: [lib/metaballs.dart](lib/metaballs.dart) — `_loadResources`, `MetaBallsPainter.paint`. The app entry and status bar wiring are in [lib/main.dart](lib/main.dart).
 
 ---
 
-## Шаг 13: Комментарии в шейдере
+## Replicating Telegram Behavior
 
-Логика шейдера не менялась; унифицированы только комментарии с эталонным файлом result. В metaballs.frag комментарий к RRect заменён на «RRect field», перед строкой с effectiveR добавлен комментарий «Image mapping scales with the dynamic radius». Алгоритм, uniform'ы, blur и маска изображения совпадают с result.
+Everything is driven by one variable: **movingY**, the Y coordinate of the moving blob (avatar) center. The avatar starts lower on the screen and moves up as the user drags (or as you would scroll). That value is passed to the shader as `uCenter2.y`.
 
-- Только правки комментариев; поведение рендера то же.
+### Dynamic Island as One Blob
 
-На этом выравнивание рабочих файлов с result завершено.
+The “Dynamic Island” is the **first blob**: a fixed rounded rectangle (RRect). Its center and size are constants in the painter. The **second blob** is the avatar circle; its center Y is `movingY`. When the two get close, the combined field exceeds the threshold and they merge on screen. So the island is static; the avatar “flows” into it. See [lib/metaballs.dart](lib/metaballs.dart) for `_snapTop` / `_snapBottom` and [shaders/metaballs.frag](shaders/metaballs.frag) for the two fields.
+
+### Snapping
+
+When the user releases the drag, we **snap** to one of two positions: fully expanded (avatar down) or fully merged (avatar up). We compare `movingY` to a midpoint (e.g. one-third of the range); if below, snap to top, else to bottom. The snap is animated with a short duration and easeOutCubic. Code: [lib/metaballs.dart](lib/metaballs.dart) — `onPanEnd`, `_snapTo`, and the snap constants.
+
+### Changing Radius
+
+As the avatar approaches the island, its **radius** in the shader is reduced (interpolated from full size down to match the island’s corner size). That keeps the merge visually and numerically stable. The distance from the avatar center to the RRect surface (`surfDist`) is used in the shader to compute this. See [shaders/metaballs.frag](shaders/metaballs.frag) — `surfDist`, `proximity`, `actualR2`.
+
+---
+
+## Finishing Touches
+
+- **Blur:** As the avatar gets closer to the island, the image is blurred more (blur radius 0–20, 56 samples along a Fibonacci spiral with Gaussian weights). References: [Phi](https://mini.gmshaders.com/p/phi), [Blur philosophy](https://mini.gmshaders.com/p/blur-philosophy). Implemented in [shaders/metaballs.frag](shaders/metaballs.frag) — `sampleBlurred`, `blurProximity`, `blurRadius`.
+- **Darkening:** The image is darkened near the merge (Telegram does the same); the shader mixes toward black using the field ratio.
+- **Background:** Background color lerps from transparent to blue as `movingY` increases (expanded state). Same lerp parameter as in the article: `(movingY - 30) / (_snapBottom - 30)` clamped. Code: [lib/metaballs.dart](lib/metaballs.dart) — `Container` color.
+- **Text and status bar:** Text color and size depend on `movingY` (e.g. black when high, white when low; font size 17–26). The host app uses `MetaBallsView.onStatusBarStyleChange` to switch status bar style so icons stay readable. Implemented in [lib/metaballs.dart](lib/metaballs.dart) (text `TextStyle`, `_notifyStatusBarStyle`) and [lib/main.dart](lib/main.dart) (`AnnotatedRegion<SystemUiOverlayStyle>`).
+- **Shadow:** A circular `BoxShadow` behind the avatar separates it from the background; its opacity and color also lerp with `movingY`.
+
+---
+
+## Running the Project
+
+```bash
+flutter pub get
+flutter run
+```
+
+Ensure `assets/avatar.jpg` exists (or change the asset path in [lib/metaballs.dart](lib/metaballs.dart) in `_loadResources`). The shader is loaded from `shaders/metaballs.frag` (see `pubspec.yaml` assets if you move files).
+
+---
+
+*This README is based on the original article “Повторяем профиль Телеграмма, используя Metaballs и Flutter,” adapted to English and linked to this repository’s code.*
