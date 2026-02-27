@@ -1,5 +1,3 @@
-#version 460 core
-
 #include <flutter/runtime_effect.glsl>
 
 uniform vec2 uCenter1;
@@ -39,7 +37,7 @@ vec4 sampleBlurred(sampler2D tex, vec2 uv, vec2 pixToUv, float radius) {
 void main() {
     vec2 pos = FlutterFragCoord().xy;
 
-    float topEdge = uCenter1.y - uHalfSize1.y - 2.0;
+    float topEdge = uCenter1.y - uHalfSize1.y + 6.0;
     if (pos.y < topEdge) {
         fragColor = vec4(0.0);
         return;

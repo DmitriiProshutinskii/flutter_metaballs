@@ -123,9 +123,12 @@ class _MetaBallsViewState extends State<MetaBallsView>
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.blueAccent.shade100.withValues(
-                      alpha: 0.6,
-                    ),
+                    color: Color.lerp(
+                      const ui.Color(0x0082B1FF),
+                      const ui.Color(0xFF82B1FF).withValues(alpha: 0.6),
+                      ((movingY - 30) / (_snapBottom - 30)).clamp(0.0, 1.0),
+                    )!,
+
                     blurRadius: 30,
                     spreadRadius: 15,
                   ),
@@ -158,24 +161,6 @@ class _MetaBallsViewState extends State<MetaBallsView>
               centerX: centerX,
             ),
           ),
-        ),
-        Builder(
-          builder: (context) {
-            const innerR = innerH / 2;
-            const diBottom = centerY + halfH;
-            return Positioned(
-              left: centerX - innerW / 2,
-              top: diBottom - innerH,
-              child: Container(
-                width: innerW,
-                height: innerH,
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(innerR),
-                ),
-              ),
-            );
-          },
         ),
         Positioned(
           top: movingY + halfH + 30 + (1 - movingY / _snapBottom) * 15,
@@ -217,8 +202,8 @@ class MetaBallsPainter extends CustomPainter {
     required this.centerX,
   });
 
-  static const _center1Y = 29.5;
-  static const _halfW1 = 63.0;
+  static const _center1Y = 27.5;
+  static const _halfW1 = 58.0;
   static const _halfH1 = 18.5;
   static const _cornerR1 = 18.5;
   static const _r2 = 80.0;
